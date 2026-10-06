@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gnn-drift-botnet-detection"
+version = "0.1.0"
+description = "TCC: Resiliência de GNNs a mudanças de distribuição na detecção de botnets em IoT"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Aluna de Graduacao", email = "aluna@example.com" }
+]
+
+# ==============================================================================
+# (a) DEPENDÊNCIAS BASE / LEVES (Local: processamento, parsing Zeek e exploração)
+# ==============================================================================
+dependencies = [
+    "pandas>=2.0.0,<3.0.0",
+    "numpy>=1.24.0,<2.0.0",
+    "pyarrow>=14.0.0",
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+    "requests>=2.31.0",
+    "tqdm>=4.66.0",
+]
+
+# ==============================================================================
+# GRUPOS OPCIONAIS (Instalação sob demanda via pip install -e ".[grupo]")
+# ==============================================================================
+[project.optional-dependencies]
+# Dependências para testes locais
+test = [
+    "pytest>=7.4.0",
+]
+
+# (b) Dependências pesadas para o runtime do Colab com GPU
+# NOTA: O PyTorch já vem no runtime do Colab; torch_geometric_temporal
+# será adicionado na Semana 4 por compatibilidade.
+colab = [
+    "torch-geometric>=2.4.0",
+    "scikit-learn>=1.3.0",
+]
+
+# Todos os extras combinados (desenvolvimento completo)
+dev = [
+    "gnn-drift-botnet-detection[test,colab]",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+# ==============================================================================
+# CONFIGURAÇÃO DO PYTEST (Elimina necessidade de PYTHONPATH ou sys.path hacks)
+# ==============================================================================
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-v"
+
