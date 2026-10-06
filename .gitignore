@@ -9,7 +9,6 @@ __pycache__/
 
 # Variáveis de ambiente e credenciais
 .env
-.env.*
 secrets.json
 *.pem
 *.key
