@@ -46,11 +46,11 @@ Com base no parecer e nas observações da banca de qualificação (Prof. Dr. Mo
 
 #### Bloco B: Pipeline de Dados & Representação em Grafos
 
-- [ ] Harmonizar variáveis e gerar parquets finais dos cenários (IoT-23 e Bot-IoT).
-- [ ] Implementar a segmentação em snapshots temporais para modelos dinâmicos.
-- [ ] Implementar e testar o cálculo da heurística de pesos das arestas:
+- [x] Harmonizar variáveis e gerar parquets finais dos cenários (IoT-23, TON-IoT e CTU-13 via `src/harmonization.py`).
+- [x] Implementar a segmentação em snapshots temporais para modelos dinâmicos (`create_temporal_snapshots` em `src/graphs.py`).
+- [x] Implementar e testar o cálculo da heurística de pesos das arestas (`compute_edge_weights` em `src/graphs.py`):
   $$w(u, v) = \frac{f(u,v)}{\sum_i f(u,i)}$$
-- [ ] Pipeline de particionamento cronológico (80/20) e *undersampling* aleatório estratificado aplicado exclusivamente ao conjunto de treinamento.
+- [x] Pipeline de particionamento cronológico (80/20) e *undersampling* aleatório estratificado aplicado exclusivamente ao conjunto de treinamento (`generate_temporal_splits` e `stratified_train_undersampling` em `src/data.py`).
 
 #### Bloco C: Implementação e Treinamento dos Modelos
 

@@ -90,6 +90,84 @@ def download_iot23_lightweight(
     return dest_dir
 
 
+# Identificador do dataset no Kaggle (espelho do tráfego de rede TON-IoT processado em Zeek / CSV)
+# Referência: https://www.kaggle.com/datasets/arnobbhowmik/ton-iot-network-dataset
+TON_IOT_KAGGLE_DATASET: str = "arnobbhowmik/ton-iot-network-dataset"
+
+
+def download_ton_iot_kaggle(
+    dest_dir: Optional[Path] = None,
+    dataset_slug: str = TON_IOT_KAGGLE_DATASET,
+    force_download: bool = False,
+) -> Path:
+    """
+    Baixa e descompacta o espelho do dataset TON-IoT (Network Dataset) a partir do Kaggle.
+
+    O TON-IoT Network Dataset disponibilizado no Kaggle contém os fluxos de rede
+    gerados via Zeek/Argus em formato CSV, servindo como base para o Cenário D (Domain Shift).
+
+    Pré-requisitos de Autenticação no Kaggle:
+    -----------------------------------------
+    1. Instalar o pacote oficial: `pip install kaggle`
+    2. Obter as credenciais da API do Kaggle:
+       - Acesse https://www.kaggle.com/settings -> seção "API" -> "Create New Token".
+       - Será baixado um arquivo `kaggle.json`.
+    3. Posicionar o token no local padrão:
+       - Linux/macOS: `~/.kaggle/kaggle.json` (com permissão: `chmod 600 ~/.kaggle/kaggle.json`)
+       - Windows: `C:\\Users\\<Usuario>\\.kaggle\\kaggle.json`
+       - Ou configurar as variáveis de ambiente:
+         `export KAGGLE_USERNAME="seu_usuario"`
+         `export KAGGLE_KEY="sua_chave_de_api"`
+    """
+    if dest_dir is None:
+        dest_dir = DATA_DIR / "ton_iot"
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    extracted_flag = dest_dir / ".ton_iot_extracted"
+
+    if extracted_flag.exists() and not force_download:
+        logger.info("Dataset TON-IoT já extraído em %s", dest_dir)
+        return dest_dir
+
+    logger.info("Iniciando download do dataset TON-IoT via Kaggle API (%s)...", dataset_slug)
+
+    try:
+        # Import lazy do kaggle para não quebrar ambientes locais que não o possuam instalado ainda
+        import zipfile
+        from kaggle.api.kaggle_api_extended import KaggleApi
+
+        api = KaggleApi()
+        api.authenticate()
+
+        # Download do arquivo zip do dataset para a pasta de destino
+        api.dataset_download_files(dataset_slug, path=str(dest_dir), unzip=True, quiet=False)
+
+        extracted_flag.touch()
+        logger.info("Download e extração do TON-IoT concluídos com sucesso em %s", dest_dir)
+        return dest_dir
+
+    except ImportError:
+        msg = (
+            "A biblioteca 'kaggle' não está instalada no ambiente.\n"
+            "Para baixar automaticamente via Python, execute:\n"
+            "    pip install kaggle\n"
+            "E configure seu token em ~/.kaggle/kaggle.json.\n\n"
+            "Alternativamente, baixe o arquivo zip manualmente em:\n"
+            f"    https://www.kaggle.com/datasets/{dataset_slug}\n"
+            f"e extraia o conteúdo na pasta: {dest_dir}"
+        )
+        logger.error(msg)
+        raise RuntimeError(msg)
+    except Exception as e:
+        logger.error(
+            "Falha ao autenticar ou baixar via Kaggle API: %s\n"
+            "Verifique se o arquivo ~/.kaggle/kaggle.json existe e possui permissões corretas (chmod 600).\n"
+            "Ou baixe manualmente de: https://www.kaggle.com/datasets/%s e extraia em %s",
+            e, dataset_slug, dest_dir
+        )
+        raise e
+
+
 def parse_zeek_header(filepath: Path) -> List[str]:
     """
     Lê as primeiras linhas de um arquivo Zeek conn.log para extrair a lista de colunas.
@@ -274,10 +352,13 @@ def list_iot23_captures(base_dir: Path = DATA_DIR) -> pd.DataFrame:
 
 def generate_temporal_splits(
     captures_summary_df: pd.DataFrame,
-    train_ratio: float = 0.7,
+    train_ratio: float = 0.8,
 ) -> Tuple[List[str], List[str]]:
     """
     Gera uma partição temporal em ordem cronológica estrita (sem embaralhamento).
+    
+    Por padrão utiliza proporção 80/20 (80% capturas mais antigas para treino,
+    20% mais recentes para teste temporal).
     
     Retorna (lista_treino, lista_teste) contendo os nomes das capturas.
     """
@@ -289,4 +370,45 @@ def generate_temporal_splits(
     test_captures = sorted_df.iloc[n_train:]["capture_name"].tolist()
 
     return train_captures, test_captures
+
+
+def stratified_train_undersampling(
+    df_train: pd.DataFrame,
+    majority_class: int = 1,
+    minority_class: int = 0,
+    ratio: float = 1.0,
+    random_state: int = 42,
+) -> pd.DataFrame:
+    """
+    Aplica undersampling aleatório estratificado exclusivamente no conjunto de treino.
+    
+    Controla o desbalanceamento extremo de classes preservando a proporção desejada.
+    Nunca deve ser aplicado no conjunto de teste.
+    """
+    if "label" not in df_train.columns:
+        raise ValueError("O DataFrame precisa conter a coluna 'label'.")
+
+    df_min = df_train[df_train["label"] == minority_class]
+    df_maj = df_train[df_train["label"] == majority_class]
+
+    n_minority = len(df_min)
+    if n_minority == 0 or len(df_maj) == 0:
+        logger.warning("Uma das classes possui 0 amostras. Nenhum undersampling realizado.")
+        return df_train
+
+    n_majority_sample = int(n_minority * ratio)
+    if n_majority_sample >= len(df_maj):
+        return df_train
+
+    df_maj_sampled = df_maj.sample(n=n_majority_sample, random_state=random_state)
+    df_resampled = pd.concat([df_min, df_maj_sampled], ignore_index=True)
+
+    # Ordena de volta por timestamp para preservar coerência cronológica
+    if "ts" in df_resampled.columns:
+        df_resampled = df_resampled.sort_values("ts").reset_index(drop=True)
+    else:
+        df_resampled = df_resampled.sample(frac=1.0, random_state=random_state).reset_index(drop=True)
+
+    return df_resampled
+
 
