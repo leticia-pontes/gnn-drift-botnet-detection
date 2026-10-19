@@ -1,2 +1,0 @@
-"""Subpacote de testes unitários."""
-
